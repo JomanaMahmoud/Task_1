@@ -71,9 +71,22 @@ export async function createPerk(req, res, next) {
 // Update an existing perk by ID and validate only the fields that are being updated 
 export async function updatePerk(req, res, next) {
   try {
-    // Make all fields optional for partial update
-    const partialSchema = perkSchema.fork(Object.keys(perkSchema.describe().keys), (field) => field.optional());
-    const { value, error } = partialSchema.validate(req.body);
+    // Only validate and update fields that are present in req.body, without applying defaults
+    const updateFields = Object.keys(req.body);
+    if (updateFields.length === 0) {
+      return res.status(400).json({ message: 'No fields provided for update' });
+    }
+    // Build a schema with only the fields being updated, all optional, no defaults
+    const partialSchema = Joi.object(
+      updateFields.reduce((acc, key) => {
+        const extracted = perkSchema.extract(key);
+        if (extracted !== undefined) {
+          acc[key] = extracted.optional();
+        }
+        return acc;
+      }, {})
+    );
+    const { value, error } = partialSchema.validate(req.body, { noDefaults: true });
     if (error) return res.status(400).json({ message: error.message });
 
     const updated = await Perk.findByIdAndUpdate(
